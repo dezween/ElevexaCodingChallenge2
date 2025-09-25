@@ -1,0 +1,22 @@
+# Ignore build artifacts
+kyber-server
+*.exe
+
+# Coverage files
+coverage.out
+coverage/
+
+# IDE/editor files
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go test cache
+**/testdata/
+
+# Misc
+*.log
+
