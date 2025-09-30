@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLoadConfig_Default(t *testing.T) {
@@ -15,9 +17,7 @@ func TestLoadConfig_Default(t *testing.T) {
 	os.Unsetenv("KYBER_SERVER_PORT")
 
 	cfg := LoadConfig()
-	if cfg.Port != ":8080" {
-		t.Fatalf("expected default port :8080, got %q", cfg.Port)
-	}
+	assert.Equal(t, ":8080", cfg.Port, "expected default port :8080")
 }
 
 func TestLoadConfig_NoColon(t *testing.T) {
@@ -30,9 +30,7 @@ func TestLoadConfig_NoColon(t *testing.T) {
 	os.Setenv("KYBER_SERVER_PORT", "9090")
 
 	cfg := LoadConfig()
-	if cfg.Port != ":9090" {
-		t.Fatalf("expected port :9090 for KYBER_SERVER_PORT=9090, got %q", cfg.Port)
-	}
+	assert.Equal(t, ":9090", cfg.Port, "expected port :9090 for KYBER_SERVER_PORT=9090")
 }
 
 func TestLoadConfig_WithColon(t *testing.T) {
@@ -45,7 +43,5 @@ func TestLoadConfig_WithColon(t *testing.T) {
 	os.Setenv("KYBER_SERVER_PORT", ":9091")
 
 	cfg := LoadConfig()
-	if cfg.Port != ":9091" {
-		t.Fatalf("expected port :9091 for KYBER_SERVER_PORT=:9091, got %q", cfg.Port)
-	}
+	assert.Equal(t, ":9091", cfg.Port, "expected port :9091 for KYBER_SERVER_PORT=:9091")
 }
