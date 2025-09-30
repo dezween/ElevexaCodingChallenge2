@@ -38,18 +38,74 @@ ElevexaCodingChallenge2/
         └── server_test.go
 ```
 
-- **Note**: Some files/folders (for example `.idea/`, `kyber-server`, `coverage/`) may be present only in development or after running build/tests; they are listed here to reflect the current workspace state.
-
 - **main.go**: Only starts the server, no business logic.
 - **internal/config**: Loads configuration from environment variables.
 - **internal/handlers**: HTTP layer, no business logic; errors are logged and safe for clients.
 - **internal/kybertransit**: Kyber key management, encryption, decryption. All functions documented and errors are informative.
 - **internal/routes**: Central place for route templates and route names used for named routes.
 - **internal/server**: Router setup; routes are registered and named for safe URL building in tests.
+- **.gitignore**: Excludes binaries, coverage, IDE files, etc.
+- **LICENSE**: MIT license.
 
-## Named routes and tests
+## API Endpoints
 
-This project uses gorilla/mux named routes. Routes are registered with `.Name(...)` in `internal/server.NewRouter()` and tests build concrete URLs using `router.Get("routeName").URL("name", value)`. This keeps route registration and URL building in sync (single source of truth).
+All endpoints are POST and accept/return JSON.
+
+### 1. Create a new Kyber key pair
+- **POST** `/transit/keys/{name}`
+- **Request body:** `{}`
+- **Response:**
+```json
+{
+  "name": "my-key",
+  "public_key": "...base64..."
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/transit/keys/my-key -H "Content-Type: application/json" -d "{}"
+```
+
+### 2. Encrypt data with Kyber
+- **POST** `/transit/encrypt/{name}`
+- **Request body:**
+```json
+{
+  "plaintext": "...base64..."
+}
+```
+- **Response:**
+```json
+{
+  "ciphertext": "...base64..."
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/transit/encrypt/my-key -H "Content-Type: application/json" -d '{"plaintext":"SGVsbG8gd29ybGQ="}'
+```
+
+### 3. Decrypt data with Kyber
+- **POST** `/transit/decrypt/{name}`
+- **Request body:**
+```json
+{
+  "ciphertext": "...base64..."
+}
+```
+- **Response:**
+```json
+{
+  "plaintext": "...base64..."
+}
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8080/transit/decrypt/my-key -H "Content-Type: application/json" -d '{"ciphertext":"..."}'
+```
 
 ## Configuration
 
@@ -65,38 +121,29 @@ Example (Unix-like):
 export KYBER_SERVER_PORT=:9090
 ```
 
-## Deployment & Run
-
-This section has quick instructions to build and run the standalone service locally (useful for development and testing)
-
-### Local build and run
+## Build, Run, and Test
 
 You can build and run the service directly with Go or use the provided `Makefile`.
 
-1) Build with Go:
+### Using Makefile (recommended)
 
-```bash
-# Build binary
-go build -o kyber-server main.go
-
-# Run binary (default port :8080)
-./kyber-server
+```cmd
+make test        # Run all unit and integration tests
+make build       # Build binary (kyber-server.exe on Windows, kyber-server on Unix)
+make run         # Build and run the server
+make clean       # Remove binaries
 ```
 
-2) Using the Makefile (recommended for development):
+### With Go directly
 
-```bash
-# Run unit and integration tests
-make test
-
-# Build binary
-make build
-
-# Run the built binary
-make run
+```cmd
+go build -o kyber-server.exe main.go   # Windows
+go build -o kyber-server main.go       # Unix
+./kyber-server.exe                     # Windows
+./kyber-server                         # Unix
 ```
 
-3) Running with a custom port (example):
+### Run with a custom port
 
 Windows (cmd.exe):
 ```cmd
