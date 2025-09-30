@@ -24,7 +24,7 @@ func TestServerRoutes(t *testing.T) {
 		{"POST", routes.RouteCreateKey, "", http.StatusConflict}, // duplicate
 		{"POST", routes.RouteEncrypt, `{"plaintext":"abc"}`, http.StatusOK},
 		{"POST", "/transit/encrypt/unknown", `{"plaintext":"abc"}`, http.StatusNotFound},
-		{"POST", routes.RouteDecrypt, `{"ciphertext":"bad","encdata":"bad"}`, http.StatusInternalServerError},
+		{"POST", routes.RouteDecrypt, `{"ciphertext":"bad","encdata":"bad"}`, http.StatusBadRequest},
 		{"POST", "/transit/decrypt/unknown", `{"ciphertext":"bad","encdata":"bad"}`, http.StatusNotFound},
 	}
 
@@ -44,4 +44,13 @@ func TestServerNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestHealthCheck(t *testing.T) {
+	router := NewRouter()
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "ok", w.Body.String())
 }

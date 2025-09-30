@@ -8,10 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/dezween/ElevexaCodingChallenge2/internal/handlers"
 	"github.com/dezween/ElevexaCodingChallenge2/internal/routes"
 	"github.com/dezween/ElevexaCodingChallenge2/internal/server"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -22,61 +22,108 @@ const (
 	unknownKey = "unknown"
 )
 
-func TestCreateKeyHandler_Success(t *testing.T) {
+func TestCreateKeyHandler_TableDriven(t *testing.T) {
+	// Ensure test isolation
+	handlers.ResetKeyStore()
 	r := server.NewRouter()
-	url, _ := r.Get(routes.RouteNameCreateKey).URL("name", testKey1)
-	req := httptest.NewRequest("POST", url.String(), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code)
+	tests := []struct {
+		name       string
+		keyName    string
+		firstReq   bool
+		wantStatus int
+		wantField  string
+		wantValue  string
+	}{
+		{"create new key", testKey1, true, http.StatusCreated, "message", "Key created"},
+		{"duplicate key", testKey1, false, http.StatusConflict, "error", "Key already exists"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url, _ := r.Get(routes.RouteNameCreateKey).URL("name", tt.keyName)
+			if tt.firstReq {
+				req := httptest.NewRequest("POST", url.String(), nil)
+				w := httptest.NewRecorder()
+				r.ServeHTTP(w, req)
+				assert.Equal(t, tt.wantStatus, w.Code)
+				var resp map[string]string
+				_ = json.Unmarshal(w.Body.Bytes(), &resp)
+				assert.Equal(t, tt.wantValue, resp[tt.wantField])
+			} else {
+				// duplicate
+				req := httptest.NewRequest("POST", url.String(), nil)
+				w := httptest.NewRecorder()
+				r.ServeHTTP(w, req)
+				w = httptest.NewRecorder()
+				r.ServeHTTP(w, req)
+				assert.Equal(t, tt.wantStatus, w.Code)
+				var resp map[string]string
+				_ = json.Unmarshal(w.Body.Bytes(), &resp)
+				assert.Equal(t, tt.wantValue, resp[tt.wantField])
+			}
+		})
+	}
 }
 
-func TestCreateKeyHandler_Duplicate(t *testing.T) {
+func TestEncryptHandler_TableDriven(t *testing.T) {
+	handlers.ResetKeyStore()
 	r := server.NewRouter()
-	url, _ := r.Get(routes.RouteNameCreateKey).URL("name", testKey1)
-	// first create
-	req := httptest.NewRequest("POST", url.String(), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	// duplicate
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusConflict, w.Code)
-}
-
-func TestEncryptHandler_Success(t *testing.T) {
-	r := server.NewRouter()
+	// First, we create a key
 	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", testKey2)
 	req := httptest.NewRequest("POST", createURL.String(), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Encrypt
-	encReq := map[string]string{"plaintext": "hello quantum world"}
-	encBody, _ := json.Marshal(encReq)
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", testKey2)
-	req = httptest.NewRequest("POST", encURL.String(), bytes.NewReader(encBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	var encResp map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &encResp)
-	require.NoError(t, err)
-	assert.NotEmpty(t, encResp["ciphertext"])
-	assert.NotEmpty(t, encResp["encdata"])
+	tests := []struct {
+		name       string
+		keyName    string
+		body       interface{}
+		wantStatus int
+		wantField  string
+		wantValue  string
+	}{
+		{"success", testKey2, map[string]string{"plaintext": "hello quantum world"}, http.StatusOK, "ciphertext", ""},
+		{"unknown key", unknownKey, map[string]string{"plaintext": "data"}, http.StatusNotFound, "error", "Key not found"},
+		{"invalid JSON", testKey2, "notjson", http.StatusBadRequest, "error", "Invalid JSON"},
+		{"missing plaintext", testKey2, map[string]string{}, http.StatusBadRequest, "error", "Missing plaintext"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", tt.keyName)
+			var bodyBytes []byte
+			if s, ok := tt.body.(string); ok {
+				bodyBytes = []byte(s)
+			} else {
+				bodyBytes, _ = json.Marshal(tt.body)
+			}
+			req := httptest.NewRequest("POST", encURL.String(), bytes.NewReader(bodyBytes))
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, tt.wantStatus, w.Code)
+			var resp map[string]string
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if tt.wantValue != "" {
+				assert.Equal(t, tt.wantValue, resp[tt.wantField])
+			} else {
+				assert.NotEmpty(t, resp[tt.wantField])
+			}
+		})
+	}
 }
 
-func TestDecryptHandler_Success(t *testing.T) {
+func TestDecryptHandler_TableDriven(t *testing.T) {
+	handlers.ResetKeyStore()
 	r := server.NewRouter()
-	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", testKey2)
+	// First, we create a key and encrypt the data.
+	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", testKey3)
 	req := httptest.NewRequest("POST", createURL.String(), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Encrypt
-	encReq := map[string]string{"plaintext": "hello quantum world"}
+	encReq := map[string]string{"plaintext": "data"}
 	encBody, _ := json.Marshal(encReq)
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", testKey2)
+	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", testKey3)
 	req = httptest.NewRequest("POST", encURL.String(), bytes.NewReader(encBody))
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -85,130 +132,32 @@ func TestDecryptHandler_Success(t *testing.T) {
 	ct := encResp["ciphertext"]
 	encdata := encResp["encdata"]
 
-	// Decrypt
-	decReq := map[string]string{"ciphertext": ct, "encdata": encdata}
-	decBody, _ := json.Marshal(decReq)
-	decURL, _ := r.Get(routes.RouteNameDecrypt).URL("name", testKey2)
-	req = httptest.NewRequest("POST", decURL.String(), bytes.NewReader(decBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	var decResp map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &decResp)
-	require.NoError(t, err)
-	assert.Equal(t, "hello quantum world", decResp["plaintext"])
-}
+	tests := []struct {
+		name       string
+		keyName    string
+		body       map[string]string
+		wantStatus int
+		wantField  string
+		wantValue  string
+	}{
+		{"success", testKey3, map[string]string{"ciphertext": ct, "encdata": encdata}, http.StatusOK, "plaintext", "data"},
+		{"unknown key", unknownKey, map[string]string{"ciphertext": ct, "encdata": encdata}, http.StatusNotFound, "error", "Key not found"},
+		{"invalid ciphertext", testKey3, map[string]string{"ciphertext": base64.StdEncoding.EncodeToString([]byte("bad")), "encdata": encdata}, http.StatusBadRequest, "error", "Decryption failed: invalid ciphertext, encdata, or internal error"},
+		{"missing ciphertext", testKey3, map[string]string{"encdata": encdata}, http.StatusBadRequest, "error", "Missing ciphertext or encdata"},
+		{"missing encdata", testKey3, map[string]string{"ciphertext": ct}, http.StatusBadRequest, "error", "Missing ciphertext or encdata"},
+	}
 
-func TestEncryptHandler_UnknownKey(t *testing.T) {
-	r := server.NewRouter()
-	encReq := map[string]string{"plaintext": "data"}
-	encBody, _ := json.Marshal(encReq)
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", unknownKey)
-	req := httptest.NewRequest("POST", encURL.String(), bytes.NewReader(encBody))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestDecryptHandler_UnknownKey(t *testing.T) {
-	r := server.NewRouter()
-	decReq := map[string]string{"ciphertext": "abc", "encdata": "abc"}
-	decBody, _ := json.Marshal(decReq)
-	decURL, _ := r.Get(routes.RouteNameDecrypt).URL("name", unknownKey)
-	req := httptest.NewRequest("POST", decURL.String(), bytes.NewReader(decBody))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestDecryptHandler_InvalidCiphertext(t *testing.T) {
-	r := server.NewRouter()
-	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", testKey3)
-	req := httptest.NewRequest("POST", createURL.String(), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	// Encrypt
-	encReq := map[string]string{"plaintext": "data"}
-	encBody, _ := json.Marshal(encReq)
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", testKey3)
-	req = httptest.NewRequest("POST", encURL.String(), bytes.NewReader(encBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	var encResp map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &encResp)
-
-	badct := base64.StdEncoding.EncodeToString([]byte("bad"))
-	decReq := map[string]string{"ciphertext": badct, "encdata": encResp["encdata"]}
-	decBody, _ := json.Marshal(decReq)
-	decURL, _ := r.Get(routes.RouteNameDecrypt).URL("name", testKey3)
-	req = httptest.NewRequest("POST", decURL.String(), bytes.NewReader(decBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.NotEqual(t, http.StatusOK, w.Code)
-}
-
-func TestEncryptHandler_EmptyPlaintext(t *testing.T) {
-	r := server.NewRouter()
-	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", edgeKey)
-	req := httptest.NewRequest("POST", createURL.String(), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	encReq := map[string]string{"plaintext": ""}
-	encBody, _ := json.Marshal(encReq)
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", edgeKey)
-	req = httptest.NewRequest("POST", encURL.String(), bytes.NewReader(encBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var encResp map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &encResp)
-	require.NoError(t, err)
-	ct := encResp["ciphertext"]
-	assert.NotEmpty(t, ct)
-}
-
-func TestDecryptHandler_EmptyEncdata(t *testing.T) {
-	r := server.NewRouter()
-	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", edgeKey)
-	req := httptest.NewRequest("POST", createURL.String(), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	encReq := map[string]string{"plaintext": ""}
-	encBody, _ := json.Marshal(encReq)
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", edgeKey)
-	req = httptest.NewRequest("POST", encURL.String(), bytes.NewReader(encBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	var encResp map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &encResp)
-	ct := encResp["ciphertext"]
-
-	// Decrypt with empty encdata
-	decReq := map[string]string{"ciphertext": ct, "encdata": ""}
-	decBody, _ := json.Marshal(decReq)
-	decURL, _ := r.Get(routes.RouteNameDecrypt).URL("name", edgeKey)
-	req = httptest.NewRequest("POST", decURL.String(), bytes.NewReader(decBody))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.NotEqual(t, http.StatusOK, w.Code)
-}
-
-func TestEncryptHandler_InvalidJSON(t *testing.T) {
-	r := server.NewRouter()
-	createURL, _ := r.Get(routes.RouteNameCreateKey).URL("name", edgeKey)
-	req := httptest.NewRequest("POST", createURL.String(), nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	encURL, _ := r.Get(routes.RouteNameEncrypt).URL("name", edgeKey)
-	req = httptest.NewRequest("POST", encURL.String(), bytes.NewReader([]byte("notjson")))
-	w = httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decURL, _ := r.Get(routes.RouteNameDecrypt).URL("name", tt.keyName)
+			bodyBytes, _ := json.Marshal(tt.body)
+			req := httptest.NewRequest("POST", decURL.String(), bytes.NewReader(bodyBytes))
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, tt.wantStatus, w.Code)
+			var resp map[string]string
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			assert.Equal(t, tt.wantValue, resp[tt.wantField])
+		})
+	}
 }

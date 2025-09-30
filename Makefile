@@ -10,6 +10,11 @@ test:
 	@echo "Running tests..."
 	go test ./... -v
 
+# Run tests with race detector
+testrace:
+	@echo "Running tests with race detector..."
+	go test -race ./... -v
+
 # Build the binary (removes old binary first)
 build:
 ifeq ($(OS),Windows_NT)
@@ -47,3 +52,9 @@ ifeq ($(OS),Windows_NT)
 else
 	@if [ -f kyber-server ]; then rm kyber-server; fi
 endif
+
+# Coverage report
+coverage:
+	@echo "Generating coverage report..."
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
