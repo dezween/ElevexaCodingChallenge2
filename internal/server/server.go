@@ -13,5 +13,6 @@ func NewRouter() *mux.Router {
 	r.HandleFunc(routes.RouteCreateKey, handlers.CreateKeyHandler).Methods("POST").Name(routes.RouteNameCreateKey)
 	r.HandleFunc(routes.RouteEncrypt, handlers.EncryptHandler).Methods("POST").Name(routes.RouteNameEncrypt)
 	r.HandleFunc(routes.RouteDecrypt, handlers.DecryptHandler).Methods("POST").Name(routes.RouteNameDecrypt)
+	r.HandleFunc("/health", handlers.HealthHandler).Methods("GET")
 	return r
 }
