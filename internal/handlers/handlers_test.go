@@ -18,7 +18,6 @@ const (
 	testKey1   = "testkey"
 	testKey2   = "testkey2"
 	testKey3   = "testkey3"
-	edgeKey    = "edgekey"
 	unknownKey = "unknown"
 )
 

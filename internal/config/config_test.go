@@ -23,14 +23,26 @@ func TestLoadConfig_TableDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			prev, had := os.LookupEnv("KYBER_SERVER_PORT")
 			if had {
-				defer os.Setenv("KYBER_SERVER_PORT", prev)
+				defer func() {
+					if err := os.Setenv("KYBER_SERVER_PORT", prev); err != nil {
+						t.Logf("failed to restore env var: %v", err)
+					}
+				}()
 			} else {
-				defer os.Unsetenv("KYBER_SERVER_PORT")
+				defer func() {
+					if err := os.Unsetenv("KYBER_SERVER_PORT"); err != nil {
+						t.Logf("failed to unset env var: %v", err)
+					}
+				}()
 			}
 			if tt.setEnv {
-				os.Setenv("KYBER_SERVER_PORT", tt.envValue)
+				if err := os.Setenv("KYBER_SERVER_PORT", tt.envValue); err != nil {
+					t.Fatalf("failed to set env var: %v", err)
+				}
 			} else {
-				os.Unsetenv("KYBER_SERVER_PORT")
+				if err := os.Unsetenv("KYBER_SERVER_PORT"); err != nil {
+					t.Fatalf("failed to unset env var: %v", err)
+				}
 			}
 			cfg := LoadConfig()
 			assert.Equal(t, tt.expect, cfg.Port)

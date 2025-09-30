@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ func main() {
 
 	go func() {
 		log.Printf("Kyber Transit API server running on %s", cfg.Port)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("failed to start server: %v", err)
 		}
 	}()

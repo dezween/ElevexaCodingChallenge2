@@ -169,9 +169,11 @@ func DecryptHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // HealthHandler returns 200 OK for health checks.
-func HealthHandler(w http.ResponseWriter, r *http.Request) {
+func HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	if _, err := w.Write([]byte("ok")); err != nil {
+		log.Printf("[ERROR] failed to write health check response: %v", err)
+	}
 }
 
 // ResetKeyStore clears the in-memory store. Intended for tests to ensure isolation.
